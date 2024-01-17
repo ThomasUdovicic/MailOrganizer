@@ -36,10 +36,16 @@ def service_gmail():
 
 
 def search_emails(service, query):
-    # Search for emails matching the query
-    result = service.users().messages().list(userId='me', q=query).execute()
-    messages = result.get('messages', [])
-    return messages
+    all_messages = []
+    request = service.users().messages().list(userId='me', q=query)
+
+    while request is not None:
+        response = request.execute()
+        messages = response.get('messages', [])
+        all_messages.extend(messages)
+        request = service.users().messages().list_next(previous_request=request, previous_response=response)
+
+    return all_messages
 
 
 def get_message_detail(service, msg_id):
@@ -129,6 +135,10 @@ def main():
     unsubscribe_email_count = 0
     deletion_treshold = 1 # Sets threshold how many emails received before deleting all of them
 
+    # Init batch request
+    batch = service.new_batch_http_request()
+    batch_counter = 0
+
     with open('unsubscribe_links.csv', 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerow(['Subject', 'Sender', 'Website', 'Unsubscribe Link'])
@@ -153,12 +163,22 @@ def main():
             if unsubscribe_links:
                 unsubscribe_email_count += 1
                 if unsubscribe_email_count >= deletion_treshold:
-                    trash_email(service, message['id'])  # Use either trash or move to spam
+                    # trash_email(service, message['id'])  # Use either trash or move to spam
                     # move_email_to_spam(service, message['id'])
+                    batch.add(service.users().messages().trash(userId='me', id=message['id']))
+                    batch_counter += 1
 
-            for link in unsubscribe_links:  # Use a set to remove duplicates
+                    if batch_counter == 50:
+                        batch.execute()
+                        batch = service.new_batch_http_request()
+                        batch_counter = 0
+
+            for link in unsubscribe_links:  # Use a set to remove duplicatesCan 
                 website = extract_domain(link)
                 writer.writerow([subject, sender, website, link])
+
+        if batch_counter > 0:
+            batch.execute()
 
 
 if __name__ == '__main__':
