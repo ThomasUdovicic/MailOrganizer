@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+from tqdm import tqdm
 import base64
 # import re
 import pickle
@@ -143,7 +144,7 @@ def main():
         writer = csv.writer(file)
         writer.writerow(['Subject', 'Sender', 'Website', 'Unsubscribe Link'])
 
-        for message in messages:
+        for message in tqdm(messages, desc='Processing emails'):  # tqdm shows a progress bar for the loop
             msg_detail = get_message_detail(service, message['id'])
             payload = msg_detail.get('payload', {})
             headers = payload.get('headers', [])
